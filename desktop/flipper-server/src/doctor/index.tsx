@@ -75,6 +75,7 @@ export function getHealthchecks(
                 run: async (
                   _: FlipperDoctor.EnvironmentInfo,
                 ): Promise<FlipperDoctor.HealthcheckRunResult> => {
+                  // eslint-disable-next-line node/no-sync
                   const hasProblem = !fs.existsSync(
                     '/Applications/Android Studio.app',
                   );
@@ -106,6 +107,7 @@ export function getHealthchecks(
                 hasProblem: true,
                 message: ['android.sdk--no_ANDROID_HOME'],
               };
+              // eslint-disable-next-line node/no-sync
             } else if (!fs.existsSync(androidHome)) {
               const androidStudioAndroidHome = `${os.homedir()}/Library/Android/sdk`;
               const globalAndroidHome = '/opt/android_sdk';
@@ -125,6 +127,7 @@ export function getHealthchecks(
               };
             } else {
               const platformToolsDir = path.join(androidHome, 'platform-tools');
+              // eslint-disable-next-line node/no-sync
               if (!fs.existsSync(platformToolsDir)) {
                 return {
                   hasProblem: true,
@@ -258,6 +261,7 @@ export function getHealthchecks(
                 run: async (
                   _: FlipperDoctor.EnvironmentInfo,
                 ): Promise<FlipperDoctor.HealthcheckRunResult> => {
+                  const subchecks: FlipperDoctor.HealthcheckRunSubcheck[] = [];
                   const allApps =
                     await fs_extra.promises.readdir('/Applications');
                   // Xcode_14.2.0_xxxxxxx.app
@@ -271,11 +275,20 @@ export function getHealthchecks(
                   const availableXcode = latestXCode
                     ? path.join('/Applications', latestXCode)
                     : null;
+                  subchecks.push({
+                    status: availableXcode ? 'ok' : 'fail',
+                    title: 'Xcode in /Applications',
+                  });
 
                   const result = await tryExecuteCommand('xcode-select -p');
+                  subchecks.push({
+                    status: result.fail ? 'fail' : 'ok',
+                    title: 'xcode-select runs successfully',
+                  });
                   if (result.fail) {
                     return {
                       hasProblem: true,
+                      subchecks,
                       message: [
                         'ios.xcode-select--not_set',
                         {message: result.message, availableXcode},
@@ -284,18 +297,34 @@ export function getHealthchecks(
                   }
 
                   const selectedXcode = result.stdout.toString().trim();
-                  if (selectedXcode == '/Library/Developer/CommandLineTools') {
+                  const isSelectedXcodeCommandLineTools =
+                    selectedXcode == '/Library/Developer/CommandLineTools';
+                  subchecks.push({
+                    status: isSelectedXcodeCommandLineTools ? 'fail' : 'ok',
+                    title:
+                      'xcode-select does NOT point to "/Library/Developer/CommandLineTools"',
+                  });
+                  if (isSelectedXcodeCommandLineTools) {
                     return {
                       hasProblem: true,
+                      subchecks,
                       message: [
                         'ios.xcode-select--no_xcode_selected',
                         {availableXcode},
                       ],
                     };
                   }
-                  if ((await fs_extra.pathExists(selectedXcode)) == false) {
+
+                  const selectedXcodeExists =
+                    await fs_extra.pathExists(selectedXcode);
+                  subchecks.push({
+                    status: selectedXcodeExists ? 'ok' : 'fail',
+                    title: 'Selected Xcode exists',
+                  });
+                  if (!selectedXcodeExists) {
                     return {
                       hasProblem: true,
+                      subchecks,
                       message: [
                         'ios.xcode-select--nonexisting_selected',
                         {selected: selectedXcode, availableXcode},
@@ -306,9 +335,13 @@ export function getHealthchecks(
                     await validateSelectedXcodeVersion(
                       selectedXcode,
                       availableXcode,
+                      subchecks,
                     );
                   if (validatedXcodeVersion.hasProblem) {
-                    return validatedXcodeVersion;
+                    return {
+                      ...validatedXcodeVersion,
+                      subchecks,
+                    };
                   }
                   return {
                     hasProblem: false,

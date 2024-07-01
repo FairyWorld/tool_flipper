@@ -7,7 +7,7 @@
  * @format
  */
 
-import {getHealthchecks, getEnvInfo} from 'flipper-doctor';
+import {getHealthchecks, getEnvInfo} from '../doctor';
 import {FlipperDoctor} from 'flipper-common';
 import produce from 'immer';
 
@@ -68,6 +68,7 @@ export async function runHealthcheck(
   return checkResult.hasProblem && check.isRequired
     ? {
         status: 'FAILED',
+        subchecks: checkResult.subchecks,
         message: checkResult.message,
       }
     : checkResult.hasProblem && !check.isRequired
